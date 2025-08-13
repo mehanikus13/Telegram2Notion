@@ -3,3 +3,5 @@ notion-client
 python-dotenv
 openai
 pydub
+beautifulsoup4
+requests
