@@ -11,6 +11,7 @@ from telegram.ext import (
     filters,
 )
 from notion_handler import create_notion_page
+from transcriber import transcribe_voice
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -84,27 +85,43 @@ async def received_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def received_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обрабатывает голосовое сообщение."""
-    # TODO: Реализовать транскрипцию голоса в текст
+    """Обрабатывает голосовое сообщение, транскрибирует и сохраняет в Notion."""
     user_data = context.user_data
     choice = user_data.get("choice")
-    text = "Голосовое сообщение (транскрипция в разработке)"
 
     if not choice:
         await update.message.reply_text("Что-то пошло не так. Пожалуйста, начните сначала с /start.")
         return ConversationHandler.END
 
-    database_id = os.getenv(f"NOTION_DATABASE_ID_{choice.upper()}")
+    await update.message.reply_text("Получил голосовое, начинаю расшифровку... 🎙️")
 
+    voice_file_id = update.message.voice.file_id
+    transcribed_text = await transcribe_voice(voice_file_id, context)
+
+    # Проверяем, вернулась ли ошибка из транскрибатора
+    if transcribed_text and transcribed_text.startswith("Ошибка:"):
+        await update.message.reply_text(transcribed_text)
+        user_data.clear()
+        return ConversationHandler.END
+
+    if not transcribed_text:
+        await update.message.reply_text("Не удалось расшифровать голосовое сообщение.")
+        user_data.clear()
+        return ConversationHandler.END
+
+    database_id = os.getenv(f"NOTION_DATABASE_ID_{choice.upper()}")
     if not database_id:
         await update.message.reply_text(f"ID базы данных для '{choice}' не найден. Проверьте .env файл.")
         user_data.clear()
         return ConversationHandler.END
 
-    result = create_notion_page(database_id, text)
+    result = create_notion_page(database_id, transcribed_text)
 
     if result:
-        await update.message.reply_text(f"Ваша '{choice.lower()}' (голосовое) успешно сохранена в Notion!")
+        await update.message.reply_text(
+            f"Ваша '{choice.lower()}' успешно расшифрована и сохранена в Notion!\n\n"
+            f"Текст: \"{transcribed_text}\""
+        )
     else:
         await update.message.reply_text("Не удалось сохранить запись в Notion. Проверьте логи для деталей.")
 
