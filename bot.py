@@ -14,7 +14,12 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from notion_handler import create_notion_page, create_link_page
+from notion_handler import (
+    create_notion_page,
+    create_link_page,
+    get_property_options,
+    create_task_page,
+)
 from transcriber import transcribe_voice
 from url_processor import process_url
 
@@ -25,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Определяем состояния для ConversationHandler
-CHOOSING, TYPING_REPLY, AWAITING_LINK = range(3)
+CHOOSING, TYPING_REPLY, AWAITING_LINK, AWAITING_TASK_TYPE, AWAITING_TASK_IMPORTANCE, AWAITING_TASK_SPEED, AWAITING_TASK_INTEREST = range(7)
 
 # Кнопки меню
 reply_keyboard = [
@@ -94,8 +99,23 @@ async def received_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         user_data.clear()
         return ConversationHandler.END
 
-    # Создаем страницу в Notion
-    result = create_notion_page(database_id, text)
+    # Если пользователь выбрал Задачу — запускаем сбор свойств перед сохранением
+    if choice == "Задача":
+        user_data["task_title"] = text
+        user_data["task_db_id"] = database_id
+        user_data["task_props"] = {}
+        user_data["task_prop_order"] = [
+            ("NOTION_TASK_TYPE_PROP", "ТИП", AWAITING_TASK_TYPE),
+            ("NOTION_TASK_IMPORTANCE_PROP", "ВАЖНОСТЬ", AWAITING_TASK_IMPORTANCE),
+            ("NOTION_TASK_SPEED_PROP", "СКОРОСТЬ", AWAITING_TASK_SPEED),
+            ("NOTION_TASK_INTEREST_PROP", "ИНТЕРЕС", AWAITING_TASK_INTEREST),
+        ]
+        user_data["task_prop_index"] = 0
+        return await prompt_next_task_property(update, context)
+
+    # Идея — создаем страницу сразу, с учетом настраиваемого имени title-поля
+    idea_title_prop = os.getenv("NOTION_IDEA_TITLE_PROP", "Name")
+    result = create_notion_page(database_id, text, title_property_name=idea_title_prop)
 
     if result:
         await update.message.reply_text(f"Ваша '{choice.lower()}' успешно сохранена в Notion!")
@@ -143,7 +163,21 @@ async def received_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user_data.clear()
         return ConversationHandler.END
 
-    result = create_notion_page(database_id, transcribed_text)
+    if choice == "Задача":
+        user_data["task_title"] = transcribed_text
+        user_data["task_db_id"] = database_id
+        user_data["task_props"] = {}
+        user_data["task_prop_order"] = [
+            ("NOTION_TASK_TYPE_PROP", "ТИП", AWAITING_TASK_TYPE),
+            ("NOTION_TASK_IMPORTANCE_PROP", "ВАЖНОСТЬ", AWAITING_TASK_IMPORTANCE),
+            ("NOTION_TASK_SPEED_PROP", "СКОРОСТЬ", AWAITING_TASK_SPEED),
+            ("NOTION_TASK_INTEREST_PROP", "ИНТЕРЕС", AWAITING_TASK_INTEREST),
+        ]
+        user_data["task_prop_index"] = 0
+        return await prompt_next_task_property(update, context)
+
+    idea_title_prop = os.getenv("NOTION_IDEA_TITLE_PROP", "Name")
+    result = create_notion_page(database_id, transcribed_text, title_property_name=idea_title_prop)
 
     if result:
         await update.message.reply_text(
@@ -209,6 +243,113 @@ async def received_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     return ConversationHandler.END
 
 
+def _build_options_keyboard(options):
+    rows = []
+    row = []
+    for opt in options:
+        row.append(opt)
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(["Пропустить"])  # возможность пропустить свойство
+    return ReplyKeyboardMarkup(rows, one_time_keyboard=True, resize_keyboard=True)
+
+
+async def prompt_next_task_property(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Показывает следующий шаг выбора свойства задачи или создает задачу, если все свойства пройдены."""
+    user_data = context.user_data
+    index = user_data.get("task_prop_index", 0)
+    order = user_data.get("task_prop_order", [])
+
+    while index < len(order):
+        env_key, human_label, state = order[index]
+        prop_name = os.getenv(env_key)
+        if not prop_name:
+            index += 1
+            user_data["task_prop_index"] = index
+            continue
+
+        db_id = user_data.get("task_db_id")
+        options, prop_type = get_property_options(db_id, prop_name)
+        if not options:
+            index += 1
+            user_data["task_prop_index"] = index
+            continue
+
+        # Нашли свойство с опциями — спрашиваем пользователя
+        user_data["current_prop_env_key"] = env_key
+        user_data["current_prop_name"] = prop_name
+        user_data["current_prop_options"] = options
+        user_data["current_prop_label"] = human_label
+        user_data["current_state"] = state
+
+        keyboard = _build_options_keyboard(options)
+        await update.message.reply_text(
+            f"Выберите {human_label}:", reply_markup=keyboard
+        )
+        return state
+
+    # Все свойства пройдены — создаем задачу
+    title = user_data.get("task_title", "Без названия")
+    db_id = user_data.get("task_db_id")
+    props = user_data.get("task_props", {})
+    task_title_prop = os.getenv("NOTION_TASK_TITLE_PROP", "Name")
+
+    result = create_task_page(
+        database_id=db_id,
+        title=title,
+        properties=props,
+        title_property_name=task_title_prop,
+    )
+
+    if result:
+        await update.message.reply_text(
+            "Задача успешно сохранена в Notion!", reply_markup=ReplyKeyboardRemove()
+        )
+    else:
+        await update.message.reply_text(
+            "Не удалось сохранить задачу в Notion. Проверьте логи.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+    user_data.clear()
+    return ConversationHandler.END
+
+
+async def handle_task_property_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обрабатывает выбор значения для текущего свойства задачи."""
+    user_data = context.user_data
+    text = update.message.text.strip()
+
+    options = user_data.get("current_prop_options", [])
+    prop_name = user_data.get("current_prop_name")
+    human_label = user_data.get("current_prop_label")
+
+    if text == "Пропустить":
+        # просто идем дальше, не записывая значение
+        user_data["task_prop_index"] = user_data.get("task_prop_index", 0) + 1
+        return await prompt_next_task_property(update, context)
+
+    if text not in options:
+        keyboard = _build_options_keyboard(options)
+        await update.message.reply_text(
+            f"Пожалуйста, выберите одно из значений для {human_label}.",
+            reply_markup=keyboard,
+        )
+        return user_data.get("current_state", CHOOSING)
+
+    # Сохраняем выбор
+    task_props = user_data.get("task_props", {})
+    task_props[prop_name] = text
+    user_data["task_props"] = task_props
+
+    # Переходим к следующему свойству
+    user_data["task_prop_index"] = user_data.get("task_prop_index", 0) + 1
+    return await prompt_next_task_property(update, context)
+
+
 def main() -> None:
     """Запускает бота."""
     # Создание Application
@@ -230,6 +371,18 @@ def main() -> None:
             AWAITING_LINK: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, received_link)
             ],
+            AWAITING_TASK_TYPE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task_property_choice)
+            ],
+            AWAITING_TASK_IMPORTANCE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task_property_choice)
+            ],
+            AWAITING_TASK_SPEED: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task_property_choice)
+            ],
+            AWAITING_TASK_INTEREST: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task_property_choice)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -242,3 +395,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
