@@ -18,8 +18,7 @@ from telegram.ext import (
 from notion_handler import (
     create_notion_page,
     create_link_page,
-    get_database_properties,
-    update_page_properties
+
 )
 from transcriber import transcribe_voice
 from url_processor import process_url
@@ -28,8 +27,7 @@ from url_processor import process_url
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === Определяем состояния для ConversationHandler ===
-CHOOSING_ACTION, AWAITING_INPUT, AWAITING_LINK, SELECTING_TASK_PROPERTY = range(4)
+
 
 # === Клавиатуры ===
 main_keyboard = [["Идея", "Задача", "Ссылка"]]
@@ -85,7 +83,7 @@ async def save_idea(update: Update, context: ContextTypes.DEFAULT_TYPE, text: st
         await update.message.reply_text("ID базы данных для 'Идей' не найден в .env.")
         return ConversationHandler.END
 
-    result = await create_notion_page(db_id, title_prop, text)
+
     if result:
         await update.message.reply_text("Идея успешно сохранена в Notion!")
     else:
@@ -135,8 +133,7 @@ async def ask_next_task_property(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Отлично! Все детали задачи заполнены.")
         return ConversationHandler.END
 
-    prop_name = properties_to_ask[idx]
-    prop_info = user_data.get('db_properties', {}).get(prop_name)
+
 
     if not prop_info or not prop_info.get('options'):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Не удалось найти свойство '{prop_name}' или его опции в Notion. Пропускаю...")
@@ -217,6 +214,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
+
 def main() -> None:
     """Запускает бота."""
     application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
@@ -224,10 +222,7 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            CHOOSING_ACTION: [MessageHandler(filters.Regex("^(Идея|Задача|Ссылка)$"), choice_action)],
-            AWAITING_INPUT: [MessageHandler(filters.TEXT | filters.VOICE, received_input)],
-            AWAITING_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_link)],
-            SELECTING_TASK_PROPERTY: [CallbackQueryHandler(received_task_property)],
+
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -236,3 +231,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
