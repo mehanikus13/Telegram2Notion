@@ -77,7 +77,7 @@ cp .env.example .env
 
 #### `NOTION_DATABASE_ID_IDEA` и `NOTION_DATABASE_ID_TASK`
 1.  Создайте в Notion две базы данных (Database - Full page): одну для идей, другую для задач.
-2.  **Важно**: Основная колонка в обеих базах должна называться `Name` и иметь тип `Title`.
+2.  **Важно**: Основная колонка в обеих базах должна называться `Name` и иметь тип `Title`. Либо задайте имена колонок через переменные `.env` (см. ниже).
 3.  Откройте страницу с базой данных в Notion.
 4.  Скопируйте URL страницы. Он будет выглядеть примерно так: `https://www.notion.so/your-workspace/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX?v=...`
 5.  Часть `XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` — это и есть ID вашей базы данных. Скопируйте его.
@@ -93,10 +93,10 @@ cp .env.example .env
 Для работы функции сохранения ссылок вам потребуется третья база данных со специфической структурой.
 
 1.  Создайте новую базу данных в Notion.
-2.  Добавьте в нее следующие столбцы (properties) с **точными** именами и типами:
-    -   `Name` (тип `Title`) - для заголовка страницы.
-    -   `URL` (тип `URL`) - для оригинальной ссылки.
-    -   `Tags` (тип `Multi-select`) - для сгенерированных тегов.
+2.  Добавьте в нее следующие столбцы (properties) с **точными** именами и типами, либо задайте их в `.env`:
+    -   `Name` (тип `Title`) - для заголовка страницы. Можно переопределить через `NOTION_LINK_TITLE_PROP`.
+    -   `URL` (тип `URL`) - для оригинальной ссылки. Можно переопределить через `NOTION_LINK_URL_PROP`.
+    -   `Tags` (тип `Multi-select`) - для сгенерированных тегов. Можно переопределить через `NOTION_LINK_TAGS_PROP`.
 3.  Скопируйте ID этой базы данных и вставьте в поле `NOTION_DATABASE_ID_LINK` в вашем `.env` файле.
 4.  Не забудьте дать доступ вашей интеграции к этой базе данных, как вы делали для баз "Идей" и "Задач".
 
@@ -108,6 +108,15 @@ NOTION_DATABASE_ID_IDEA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 NOTION_DATABASE_ID_TASK=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 NOTION_DATABASE_ID_LINK=cccccccccccccccccccccccccccccccc
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_IDEA_TITLE_PROP=Name
+NOTION_TASK_TITLE_PROP=Name
+NOTION_TASK_TYPE_PROP=Тип
+NOTION_TASK_IMPORTANCE_PROP=Важность
+NOTION_TASK_SPEED_PROP=Скорость
+NOTION_TASK_INTEREST_PROP=Интерес
+NOTION_LINK_TITLE_PROP=Name
+NOTION_LINK_URL_PROP=URL
+NOTION_LINK_TAGS_PROP=Tags
 ```
 
 ## 5. Запуск бота
