@@ -1,6 +1,10 @@
 import os
 import logging
 from dotenv import load_dotenv
+
+# Загружаем переменные окружения в первую очередь!
+load_dotenv()
+
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Application,
@@ -13,9 +17,6 @@ from telegram.ext import (
 from notion_handler import create_notion_page, create_link_page
 from transcriber import transcribe_voice
 from url_processor import process_url
-
-# Загрузка переменных окружения
-load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(
