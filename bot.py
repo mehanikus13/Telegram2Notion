@@ -30,7 +30,13 @@ CHOOSING, TYPING_REPLY, AWAITING_LINK = range(3)
 reply_keyboard = [
     ["Идея", "Задача", "Ссылка"],
 ]
-markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+
+# Словарь для сопоставления выбора с суффиксом переменной в .env
+CHOICE_TO_DB_SUFFIX = {
+    "Идея": "IDEA",
+    "Задача": "TASK",
+}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -74,10 +80,16 @@ async def received_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return ConversationHandler.END
 
     # Определяем ID базы данных в зависимости от выбора
-    database_id = os.getenv(f"NOTION_DATABASE_ID_{choice.upper()}")
+    db_suffix = CHOICE_TO_DB_SUFFIX.get(choice)
+    if not db_suffix:
+        await update.message.reply_text("Произошла ошибка выбора. Пожалуйста, начните заново с /start.")
+        user_data.clear()
+        return ConversationHandler.END
+
+    database_id = os.getenv(f"NOTION_DATABASE_ID_{db_suffix}")
 
     if not database_id:
-        await update.message.reply_text(f"ID базы данных для '{choice}' не найден. Проверьте .env файл.")
+        await update.message.reply_text(f"ID базы данных для '{choice}' не найден. Проверьте .env файл (NOTION_DATABASE_ID_{db_suffix}).")
         user_data.clear()
         return ConversationHandler.END
 
@@ -118,9 +130,15 @@ async def received_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user_data.clear()
         return ConversationHandler.END
 
-    database_id = os.getenv(f"NOTION_DATABASE_ID_{choice.upper()}")
+    db_suffix = CHOICE_TO_DB_SUFFIX.get(choice)
+    if not db_suffix:
+        await update.message.reply_text("Произошла ошибка выбора. Пожалуйста, начните заново с /start.")
+        user_data.clear()
+        return ConversationHandler.END
+
+    database_id = os.getenv(f"NOTION_DATABASE_ID_{db_suffix}")
     if not database_id:
-        await update.message.reply_text(f"ID базы данных для '{choice}' не найден. Проверьте .env файл.")
+        await update.message.reply_text(f"ID базы данных для '{choice}' не найден. Проверьте .env файл (NOTION_DATABASE_ID_{db_suffix}).")
         user_data.clear()
         return ConversationHandler.END
 
