@@ -18,7 +18,8 @@ from telegram.ext import (
 from notion_handler import (
     create_notion_page,
     create_link_page,
-
+    get_database_properties,
+    update_page_properties,
 )
 from transcriber import transcribe_voice
 from url_processor import process_url
@@ -32,6 +33,9 @@ logger = logging.getLogger(__name__)
 # === Клавиатуры ===
 main_keyboard = [["Идея", "Задача", "Ссылка"]]
 main_markup = ReplyKeyboardMarkup(main_keyboard, one_time_keyboard=True, resize_keyboard=True)
+
+# === Состояния диалога ===
+CHOOSING_ACTION, AWAITING_INPUT, AWAITING_LINK, SELECTING_TASK_PROPERTY = range(4)
 
 # === Обработчики ===
 
@@ -83,7 +87,8 @@ async def save_idea(update: Update, context: ContextTypes.DEFAULT_TYPE, text: st
         await update.message.reply_text("ID базы данных для 'Идей' не найден в .env.")
         return ConversationHandler.END
 
-
+    page = await create_notion_page(db_id, title_prop, text)
+    result = bool(page)
     if result:
         await update.message.reply_text("Идея успешно сохранена в Notion!")
     else:
@@ -133,8 +138,8 @@ async def ask_next_task_property(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Отлично! Все детали задачи заполнены.")
         return ConversationHandler.END
 
-
-
+    prop_name = properties_to_ask[idx]
+    prop_info = user_data.get('db_properties', {}).get(prop_name)
     if not prop_info or not prop_info.get('options'):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Не удалось найти свойство '{prop_name}' или его опции в Notion. Пропускаю...")
         user_data['current_property_index'] += 1
@@ -222,7 +227,18 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-
+            CHOOSING_ACTION: [
+                MessageHandler(filters.Regex(r"^(Идея|Задача|Ссылка)$"), choice_action)
+            ],
+            AWAITING_INPUT: [
+                MessageHandler((filters.VOICE | (filters.TEXT & ~filters.COMMAND)), received_input)
+            ],
+            AWAITING_LINK: [
+                MessageHandler((filters.TEXT & ~filters.COMMAND), received_link)
+            ],
+            SELECTING_TASK_PROPERTY: [
+                CallbackQueryHandler(received_task_property, pattern=r"^taskprop_")
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
