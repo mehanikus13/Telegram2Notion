@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 
+# === Константы состояний ===
+# ConversationHandler использует числовые идентификаторы для обозначения этапов диалога.
+CHOOSING_ACTION, AWAITING_INPUT, AWAITING_LINK, SELECTING_TASK_PROPERTY = range(4)
+
 # === Клавиатуры ===
 main_keyboard = [["Идея", "Задача", "Ссылка"]]
 main_markup = ReplyKeyboardMarkup(main_keyboard, one_time_keyboard=True, resize_keyboard=True)
@@ -222,7 +226,18 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-
+            CHOOSING_ACTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, choice_action)
+            ],
+            AWAITING_INPUT: [
+                MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.VOICE, received_input)
+            ],
+            AWAITING_LINK: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, received_link)
+            ],
+            SELECTING_TASK_PROPERTY: [
+                CallbackQueryHandler(received_task_property, pattern=r"^taskprop_")
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
