@@ -16,6 +16,15 @@ def get_notion_client():
     return notion_client.Client(auth=notion_token)
 
 
+def get_database_properties(database_id: str) -> dict:
+    """Возвращает свойства Notion-базы данных с типами select и multi_select.
+
+    Args:
+        database_id: Идентификатор базы данных в Notion.
+
+    Returns:
+        Словарь с именами свойств и их возможными значениями.
+        Возвращает ``None`` в случае ошибки или отсутствия клиента.
     """
     notion = get_notion_client()
     if not notion:
@@ -32,7 +41,9 @@ def get_notion_client():
                 }
         return properties
     except notion_client.APIResponseError as e:
-        logger.error(f"Ошибка при получении свойств базы данных {database_id}: {e}")
+        logger.error(
+            f"Ошибка при получении свойств базы данных {database_id}: {e}"
+        )
         return None
 
 def update_page_properties(page_id: str, properties_to_update: dict):
