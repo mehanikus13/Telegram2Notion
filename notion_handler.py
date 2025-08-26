@@ -1,7 +1,6 @@
 import os
 import logging
 import notion_client
-from typing import Dict, List, Optional, Tuple
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -15,7 +14,9 @@ def get_notion_client():
         return None
     return notion_client.Client(auth=notion_token)
 
-
+def get_database_properties(database_id: str) -> dict | None:
+    """
+    Получает свойства базы данных Notion, особенно опции для полей типа 'select'.
     """
     notion = get_notion_client()
     if not notion:
@@ -37,16 +38,46 @@ def get_notion_client():
 
 def update_page_properties(page_id: str, properties_to_update: dict):
     """
-
+    Обновляет свойства существующей страницы Notion.
+    """
+    notion = get_notion_client()
+    if not notion:
+        return None
 
     try:
-        title_prop = title_property_name or "Name"
+        notion.pages.update(page_id=page_id, properties=properties_to_update)
+        logger.info(f"Успешно обновлена страница с ID: {page_id}")
+        return True
+    except notion_client.APIResponseError as e:
+        logger.error(f"Ошибка при обновлении страницы {page_id}: {e}")
+        return False
+
+def create_notion_page(
+    database_id: str,
+    title_prop: str,
+    url_prop: str,
+    tags_prop: str,
+    data: dict,
+) -> dict | None:
+    """
+    Создает страницу в Notion с заголовком, ссылкой и тегами.
+    """
+    notion = get_notion_client()
+    if not notion:
+        return None
+
+    try:
         new_page_data = {
             "parent": {"database_id": database_id},
             "properties": {
-
-                }
-            }
+                title_prop: {
+                    "title": [{"text": {"content": data.get('title', 'Без заголовка')}}]
+                },
+                url_prop: {"url": data.get('url')},
+                tags_prop: {
+                    "multi_select": [{"name": tag} for tag in data.get('tags', [])]
+                },
+            },
         }
         response = notion.pages.create(**new_page_data)
         logger.info("Успешно создана новая страница в Notion.")
@@ -59,10 +90,17 @@ def create_link_page(database_id: str, title_prop: str, url_prop: str, tags_prop
     """
     Создает страницу для ссылки в Notion с кастомными названиями свойств.
     """
+    notion = get_notion_client()
+    if not notion:
+        return None
 
+    page_properties = {
+        title_prop: {"title": [{"text": {"content": data.get('title', 'Без заголовка')}}]},
+        url_prop: {"url": data.get('url')},
+        tags_prop: {"multi_select": [{"name": tag} for tag in data.get('tags', [])]}
+    }
 
     try:
-
         new_page_response = notion.pages.create(
             parent={"database_id": database_id},
             properties=page_properties
@@ -70,7 +108,8 @@ def create_link_page(database_id: str, title_prop: str, url_prop: str, tags_prop
         page_id = new_page_response['id']
         logger.info(f"Успешно создана страница для ссылки с ID: {page_id}")
 
-
+        # Добавляем саммари как контент на страницу
+        summary = data.get('summary')
         if summary:
             summary_blocks = []
             for p in summary.split('\n'):
@@ -87,5 +126,5 @@ def create_link_page(database_id: str, title_prop: str, url_prop: str, tags_prop
 
         return new_page_response
     except notion_client.APIResponseError as e:
-
+        logger.error(f"Ошибка при создании страницы для ссылки: {e}")
         return None
