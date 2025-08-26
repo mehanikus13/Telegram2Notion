@@ -1,8 +1,8 @@
 import os
 import logging
 import requests
-import openai
 from bs4 import BeautifulSoup
+from openai import AsyncOpenAI
 
 # Настройка логирования
 logging.basicConfig(
@@ -11,11 +11,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Настройка клиента OpenAI
-if os.getenv("OPENAI_API_KEY"):
-    openai.api_key = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if OPENAI_API_KEY:
+    openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 else:
     logger.warning("OPENAI_API_KEY не найден. Модуль обработки URL не будет работать.")
-    openai.api_key = None
+    openai_client = None
 
 def get_url_content(url: str) -> dict | None:
     """
@@ -52,7 +53,7 @@ async def get_summary_and_tags_from_openai(text: str, original_title: str) -> di
     """
     Генерирует заголовок, саммари и теги для текста с помощью OpenAI.
     """
-    if not openai.api_key:
+    if not openai_client:
         return None
 
     # Обрезаем текст, чтобы избежать превышения лимита токенов
@@ -80,7 +81,7 @@ async def get_summary_and_tags_from_openai(text: str, original_title: str) -> di
     """
 
     try:
-        response = await openai.chat.completions.acreate(
+        response = await openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -103,7 +104,7 @@ async def get_summary_and_tags_from_openai(text: str, original_title: str) -> di
                 parsed_data['tags'] = [tag.strip() for tag in tags_str.split(',')]
 
         if 'title' not in parsed_data or 'summary' not in parsed_data:
-             raise ValueError("Не удалось распарсить ответ от OpenAI")
+            raise ValueError("Не удалось распарсить ответ от OpenAI")
 
         return parsed_data
     except Exception as e:

@@ -1,7 +1,6 @@
-python-telegram-bot
-notion-client
-python-dotenv
-openai
-pydub
-beautifulsoup4
-requests
+python-telegram-bot>=20,<22
+notion-client==2.2.1
+python-dotenv==1.0.1
+openai>=1.22.0,<2
+beautifulsoup4==4.12.3
+requests==2.32.3
